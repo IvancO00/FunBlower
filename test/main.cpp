@@ -10,19 +10,34 @@ const int escPin = 2;
 const int potPin = 13;
 const int minThrottle = 1000; // µs
 const int maxThrottle = 2000; // µs
+const float SHUNT_RESISTANCE_OHMS = 0.005347606f; // 5.35 mΩ (1 m, Ø 2 mm, rame)
 
 // ====== OLED configuration ======
 U8G2_SSD1315_128X64_NONAME_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
 
 // ====== INA219 configuration ======
-Adafruit_INA219 ina219;
+Adafruit_INA219 ina219(0x41);
+
+void scanI2CAddress() {
+  Serial.println("Scanning for I2C devices...");
+  for (uint8_t address = 1; address < 127; ++address) {
+    Wire.beginTransmission(address);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("I2C device found at address 0x%02X\n", address);
+      if (address == 0x40 || address == 0x41) { // Common INA219 addresses
+        ina219 = Adafruit_INA219(address);
+        break;
+      }
+    }
+  }
+  Serial.println("I2C scan complete.");
+}
 bool sensorAvailable = false;
 
 // -------------------------------------------------------------------
 // Read potentiometer, map to ESC range and compute power percentage
 // -------------------------------------------------------------------
-void readInput(int potPin, int minThrottle, int maxThrottle,
-               int &potValue, int &escValue, int &powerPercent) {
+void readInput(int potPin, int minThrottle, int maxThrottle, int &potValue, int &escValue, int &powerPercent) {
   potValue = analogRead(potPin);
   escValue = map(potValue, 0, 4095, minThrottle, maxThrottle);
   powerPercent = map(escValue, minThrottle, maxThrottle, 0, 100);
@@ -39,21 +54,31 @@ void updateESC(Servo &esc, int escValue) {
 // Read sensors (INA219 or fallback fixed values)
 // -------------------------------------------------------------------
 void readSensors(Adafruit_INA219 &ina219, bool sensorAvailable,
+                 float shuntResistance,
                  float &batteryVoltage, float &batteryCurrent) {
   if (sensorAvailable) {
-    batteryVoltage = ina219.getBusVoltage_V() + (ina219.getShuntVoltage_mV() / 1000.0);
-    batteryCurrent = ina219.getCurrent_mA() / 1000.0; // A
+    // Bus voltage (V) misurata dall'INA219
+    float busV = ina219.getBusVoltage_V();
+    // Shunt voltage in mV -> converti a V
+    float shuntV = ina219.getShuntVoltage_mV() / 1000.0f;
+    // Calcola corrente usando la resistenza di shunt che passi
+    batteryCurrent = 0.0f;
+    if (shuntResistance > 0.0f) {
+      batteryCurrent = shuntV / shuntResistance; // A
+    }
+    // Tensione batteria: bus voltage + caduta shunt (se vuoi includerla)
+    batteryVoltage = busV + shuntV;
   } else {
-    batteryVoltage = 14.8;
-    batteryCurrent = 3.2;
+    // Dummy fallback
+    batteryVoltage = 14.8f;
+    batteryCurrent = 3.2f;
   }
 }
 
 // -------------------------------------------------------------------
 // Update OLED display
 // -------------------------------------------------------------------
-void updateDisplay(U8G2 &display,
-                   int powerPercent, float batteryVoltage, float batteryCurrent) {
+void updateDisplay(U8G2 &display, int powerPercent, float batteryVoltage, float batteryCurrent) {
   display.clearBuffer();
   display.setFont(u8g2_font_6x10_tf);
 
@@ -118,14 +143,22 @@ void loop() {
   updateESC(esc, escValue);
 
   // 3) Sensors
-  readSensors(ina219, sensorAvailable, batteryVoltage, batteryCurrent);
+  readSensors(ina219, sensorAvailable, SHUNT_RESISTANCE_OHMS, batteryVoltage, batteryCurrent);
+
 
   // 4) Display
   updateDisplay(display, powerPercent, batteryVoltage, batteryCurrent);
 
   // Debug serial
-  Serial.printf("Pot: %d | ESC: %d | Power: %d%% | Vbat: %.2f V | Ibat: %.2f A\n",
-                potValue, escValue, powerPercent, batteryVoltage, batteryCurrent);
+  //Serial.printf("Pot: %d | ESC: %d | Power: %d%% | Vbat: %.4f V | Ibat: %.4f A\n",
+  //              potValue, escValue, powerPercent, batteryVoltage, batteryCurrent);
+
+  Serial.printf("BusV: %.4f V | ShuntV: %.4f mV\n",
+                ina219.getBusVoltage_V(), ina219.getShuntVoltage_mV());
+
+  //scanI2CAddress();
 
   delay(200);
+
+
 }
