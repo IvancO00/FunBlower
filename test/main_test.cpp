@@ -65,15 +65,16 @@ void loop() {
   Serial.printf("CFG=0x%04X  SHUNT=0x%04X  BUS=0x%04X  PWR=0x%04X  CUR=0x%04X  CAL=0x%04X\n",
                 reg_cfg, reg_shunt, reg_bus, reg_power, reg_curr, reg_cal);
 
-  // interpretazioni
-  int16_t sh_signed = (int16_t)reg_shunt;
-  float sh_mV = sh_signed * 0.01f;          // 10 µV LSB -> 0.01 mV
-  // Bus: bits [15:3], LSB 4 mV
-  uint16_t bus_shifted = (reg_bus >> 3);
-  float busV = bus_shifted * 0.004f;        // 4 mV LSB -> V
+  // interpretazioni corrette
+int16_t sh_signed = (int16_t)reg_shunt;
+float sh_mV = sh_signed * 0.01f;  // 10 µV LSB -> 0.01 mV
+
+// Bus voltage: bit [15:13] flag, bit [12:3] validi
+uint16_t bus_raw = (reg_bus >> 3) & 0x1FFF;
+float busV = bus_raw * 0.004f;    // 4 mV per LSB
 
   Serial.printf("Interpreted -> Bus_reg_shifted=%u -> BusV=%.4f V | Shunt= %d -> %.4f mV\n",
-                bus_shifted, busV, sh_signed, sh_mV);
+                bus_raw, busV, sh_signed, sh_mV);
 
   delay(700);
 }
