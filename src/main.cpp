@@ -99,6 +99,8 @@ float readPower() {
 // -------------------------------------------------------------------
 void readInput(int potPin, int minThrottle, int maxThrottle, int &potValue, int &escValue, int &powerPercent) {
   potValue = analogRead(potPin);
+  // Print raw potentiometer value for debugging
+  Serial.printf("Raw Potentiometer Value: %d\n", potValue);
   escValue = map(potValue, 0, 4095, minThrottle, maxThrottle);
   powerPercent = map(escValue, minThrottle, maxThrottle, 0, 100);
 }
@@ -179,6 +181,10 @@ void setup() {
   display.sendBuffer();
 
   INA_226_Calibration();
+
+  //potentiometer pin setup
+  analogReadResolution(12); // 12-bit resolution (0-4095)
+  pinMode(potPin, INPUT); // Configure pin as input for ADC
 }
 
 // -------------------------------------------------------------------
@@ -197,8 +203,15 @@ void loop() {
   readSensors(SHUNT_RESISTANCE_OHMS, busVoltage, batteryCurrent, batteryPower, shuntVoltage);
   updateDisplay(display, powerPercent, busVoltage, batteryCurrent);
 
+  /*
   Serial.printf("BusV: %.3f V | Current: %.3f A | Power: %.3f W | ShuntV: %.3f mV\n",
                 busVoltage, batteryCurrent, batteryPower, shuntVoltage);
+
+  // Print potentiometer values for debugging
+  Serial.printf("Pot: %4d | Filtered Pot: %4d | ESC: %4d | Power: %3d %%\n",
+                potValue, filteredPotValue, escValue, powerPercent);
+  */
+
 
   delay(200);
 }
